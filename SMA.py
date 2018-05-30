@@ -16,9 +16,9 @@ ctePips =10000
 #Constant Indicator
 nameIndic = "MA"
 #Constant candles expiration
-candlesExpired = 15
+candlesExpired = 3
 #Constant periods indicator
-indPeriod = 10
+indPeriod = 7
 #######################################3
 
 #Read CSV
@@ -113,18 +113,49 @@ for i in range(2,indPeriod):
    dfprices.loc[FilterLong,'ENTRY'+nameIndic+'Close{}'.format(i)] = "LARGO"
    dfprices.loc[FilterShort,'ENTRY'+nameIndic+'Close{}'.format(i)] = "CORTO"
 
+
+#Creating Dataframe with consolidated results
+dfresults = pd.DataFrame(index =(pd.to_datetime(dfprices["Date"]).dt.year).drop_duplicates())
+Expectancy= []
+Accuracy = []
+PLTotal = []
+PositiveYears = []
 #Consolidating Trade Strategy
-FiltLongEntries = (dfprices["ENTRYMAOpen2"]=="LARGO")
-FiltShortEntries = (dfprices["ENTRYMAOpen2"]=="CORTO")
-TradesLong = dfprices.loc[FiltLongEntries,("Date","Time","PipsLong2")]
-TradesLong.rename(columns ={"PipsLong2":"PipsCandle2"}, inplace = True)
-TradesShort = dfprices.loc[FiltShortEntries,("Date","Time","PipsShort2")]
-TradesShort.rename(columns ={"PipsShort2":"PipsCandle2"}, inplace = True)
-Trades = pd.concat([TradesLong,TradesShort])
-Trades.sort_index(inplace=True)
+for k in range(0,candlesExpired):
+    for i in range(2,indPeriod):
+        FiltLongEntries = (dfprices['ENTRY'+nameIndic+'Open{}'.format(i)]=="LARGO")
+        FiltShortEntries = (dfprices['ENTRY'+nameIndic+'Open{}'.format(i)]=="CORTO")
+        TradesLong = dfprices.loc[FiltLongEntries,("Date","Time",'PipsLong{}'.format(k))]
+        TradesLong.rename(columns ={'PipsLong{}'.format(k):'PipsCandle{}'.format(k)}, inplace = True)
+        TradesShort = dfprices.loc[FiltShortEntries,("Date","Time",'PipsShort{}'.format(k))]
+        TradesShort.rename(columns ={'PipsShort{}'.format(k):'PipsCandle{}'.format(k)}, inplace = True)
+        Trades = pd.concat([TradesLong,TradesShort])
+        Trades.sort_index(inplace=True)
+    
+        #Grouping by Years
+        Trades["Year"]= (pd.to_datetime(Trades["Date"]).dt.year)
+        dfresults[nameIndic+'Open{}'.format(i)+'Cand{}'.format(k)] = \
+        (Trades.groupby("Year")['PipsCandle{}'.format(k)].agg('sum')).values
+        
+        #Performance
+        Expectancy.append(Trades['PipsCandle{}'.format(k)].mean())
+        PLTotal.append(Trades['PipsCandle{}'.format(k)].sum())
+        PosTrades = Trades[Trades['PipsCandle{}'.format(k)]>0].shape[0]
+        NegTrades = Trades[Trades['PipsCandle{}'.format(k)]<0].shape[0]
+        Accuracy.append(PosTrades/(PosTrades+NegTrades))
 
 
-#Grouping by Years
+dfPLTotal = pd.DataFrame(PLTotal)
+dfAcc = pd.DataFrame(Accuracy)
+dfExp =  pd.DataFrame(Expectancy)
+dfPosYear = pd.DataFrame((dfresults[dfresults>0].count()).values)
+dfperform = pd.concat([dfPLTotal, dfAcc, dfExp, dfPosYear], axis= 1)
+dfperform = dfperform.T
+dfperform.columns = dfresults.columns
+indexnames = ["P/LTotal", "Accuracy", "Expectancy", "PosYears"]
+dfperform.index = indexnames
+
+
 
 
 
