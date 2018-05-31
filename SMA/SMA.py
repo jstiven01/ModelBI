@@ -19,10 +19,12 @@ nameIndic = "MA"
 candlesExpired = 3
 #Constant periods indicator
 indPeriod = 7
+#Constants round Decimal
+rounddec=5
 #######################################3
 
 #Read CSV
-dfprices = pd.read_csv("EURUSDDaily.csv", header = None)
+dfprices = pd.read_csv("../data/EURUSDDaily.csv", header = None)
 #Naming Columns
 dfprices.columns = ["Date", "Time", "Open", "High", "Low", "Close", "Volume"]
 
@@ -36,6 +38,7 @@ for i in range(0,candlesExpired):
 for i in range(2,indPeriod):
     #Rolling create windows/subsets of prices and computes the mean of subset
    dfprices[nameIndic+'Open{}'.format(i)] = dfprices["Open"].rolling(window=i).mean()
+   dfprices[nameIndic+'Open{}'.format(i)] = dfprices[nameIndic+'Open{}'.format(i)].round(rounddec)
    
    #Creating column of Entries
    dfprices['ENTRY'+nameIndic+'Open{}'.format(i)] = "NO ENTRY"
@@ -155,8 +158,25 @@ dfperform.columns = dfresults.columns
 indexnames = ["P/LTotal", "Accuracy", "Expectancy", "PosYears"]
 dfperform.index = indexnames
 
+#Best performance
+dfperform.idxmax(1)
+
+#Coding for a single Strategy
+FiltLongEntries = (dfprices['ENTRY'+nameIndic+'Open{}'.format(2)]=="LARGO")
+FiltShortEntries = (dfprices['ENTRY'+nameIndic+'Open{}'.format(2)]=="CORTO")
+TradesLong = dfprices.loc[FiltLongEntries,("Date","Time",'PipsLong{}'.format(0))]
+TradesLong.rename(columns ={'PipsLong{}'.format(0):'PipsCandle{}'.format(0)}, inplace = True)
+TradesShort = dfprices.loc[FiltShortEntries,("Date","Time",'PipsShort{}'.format(0))]
+TradesShort.rename(columns ={'PipsShort{}'.format(0):'PipsCandle{}'.format(0)}, inplace = True)
+Trades = pd.concat([TradesLong,TradesShort])
+Trades.sort_index(inplace=True)
+
+Trades["Year"]= (pd.to_datetime(Trades["Date"]).dt.year)
 
 
+TradesLong["Year"]= (pd.to_datetime(TradesLong["Date"]).dt.year)
+TradesLong[TradesLong["Year"]==2014]["PipsCandle0"].sum()
 
-
+TradesShort["Year"]= (pd.to_datetime(TradesShort["Date"]).dt.year)
+TradesShort[TradesShort["Year"]==2014]["PipsCandle0"].sum()
 

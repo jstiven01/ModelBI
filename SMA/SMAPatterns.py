@@ -16,7 +16,7 @@ ctePips =10000
 #Constant Indicator
 nameIndic = "MA"
 #Constant Filename
-filename = "../data/EURUSDDaily.csv"
+filename = "EURUSDDaily.csv"
 #Constant candles expiration
 candlesExpired = 3
 #Constant periods indicator
@@ -28,7 +28,7 @@ class SMAPatterns():
     def __init__(self):
         '''Initializing Attributes'''
 
-        self.dfprices = pd.read_csv(filename, header=None)
+        self.dfprices = pd.read_csv("../data/"+filename, header=None)
         # Naming Columns
         self.dfprices.columns = ["Date", "Time", "Open", "High", "Low", "Close", "Volume"]
 
@@ -37,6 +37,7 @@ class SMAPatterns():
         self.Expectancy = []
         self.Accuracy = []
         self.PLTotal = []
+        self.TotalTrades = []
         return
 
     def pipCandles(self, candlesExp):
@@ -53,6 +54,9 @@ class SMAPatterns():
         for i in range(2, period):
             # Rolling create windows/subsets of prices and computes the mean of subset
             self.dfprices[nameIndic + price+'{}'.format(i)] = self.dfprices[price].rolling(window=i).mean()
+
+            #Rounded to 8 Decimals
+            self.dfprices[nameIndic + price+'{}'.format(i)] = self.dfprices[nameIndic + price+'{}'.format(i)].round(8)
 
             # Creating column of Entries
             self.dfprices['ENTRY' + nameIndic + price+'{}'.format(i)] = "NO ENTRY"
@@ -107,6 +111,7 @@ class SMAPatterns():
                 PosTrades = Trades[Trades['PipsCandle{}'.format(k)] > 0].shape[0]
                 NegTrades = Trades[Trades['PipsCandle{}'.format(k)] < 0].shape[0]
                 self.Accuracy.append(PosTrades / (PosTrades + NegTrades))
+                self.TotalTrades.append(Trades["Date"].count())
 
         #print(self.dfresults)
         return
@@ -118,13 +123,26 @@ class SMAPatterns():
         dfAcc = pd.DataFrame(self.Accuracy)
         dfExp = pd.DataFrame(self.Expectancy)
         dfPosYear = pd.DataFrame((self.dfresults[self.dfresults > 0].count()).values)
-        self.dfperform = pd.concat([dfPLTotal, dfAcc, dfExp, dfPosYear], axis=1)
+        dfTotalTrades = pd.DataFrame(self.TotalTrades)
+        self.dfperform = pd.concat([dfPLTotal, dfAcc, dfExp, dfPosYear,dfTotalTrades], axis=1)
         self.dfperform = self.dfperform.T
         self.dfperform.columns = self.dfresults.columns
-        indexnames = ["P/LTotal", "Accuracy", "Expectancy", "PosYears"]
+        indexnames = ["P/LTotal", "Accuracy", "Expectancy", "PosYears", "TotalTrades"]
         self.dfperform.index = indexnames
 
         ##print(self.dfperform)
+        return
+
+    def writeResults(self, price):
+        dftotal = pd.concat([self.dfresults, self.dfperform])
+        dftotal.to_csv("SMAResults"+price+".csv", sep=',')
+        print("STRATEGIES BEST PERFORMANCES")
+        print(self.dfperform.idxmax(1))
+        print("STRATEGIES WORST PERFORMANCES")
+        print(self.dfperform.idxmin(1))
+        return
+
+    def singleStrategy(self, price, period, ):
         return
 
 
@@ -134,4 +152,5 @@ if __name__ == "__main__":
     sma.smaPeriodPrice("Open",indPeriod)
     sma.tradeStrategies("Open",indPeriod,candlesExpired)
     sma.performanceStrategies()
+    sma.writeResults("Open")
 
