@@ -18,9 +18,9 @@ nameIndic = "MA"
 #Constant Filename
 filename = "EURUSDDaily.csv"
 #Constant candles expiration
-candlesExpired = 3
+candlesExpired = 15
 #Constant periods indicator
-indPeriod = 7
+indPeriod = 200
 #######################################
 
 class SMAPatterns():
@@ -43,15 +43,18 @@ class SMAPatterns():
     def pipCandles(self, candlesExp):
         """Computing the Pips for every candle in both ways: LONG and SHORT """
 
-        for i in range(0, candlesExp):
+        for i in range(0, candlesExp+1, 1):
             self.dfprices['PipsLong{}'.format(i)] = (self.dfprices["Close"].shift(-i) - self.dfprices["Open"]) * ctePips
             self.dfprices['PipsShort{}'.format(i)] = (self.dfprices["Open"] - self.dfprices["Close"].shift(-i)) * ctePips
+            self.dfprices['CloseDate{}'.format(i)] = self.dfprices["Date"].shift(-i)
+            self.dfprices['CloseTime{}'.format(i)] = self.dfprices["Time"].shift(-i)
+            self.dfprices['ClosePrice{}'.format(i)] = self.dfprices["Close"].shift(-i)
         return
 
-    def smaPeriodPrice(self, price, period):
+    def smaPeriodPrice(self, price, period, inverse):
         """Calculating SMA with price (open, close, high, low) and period"""
 
-        for i in range(2, period):
+        for i in range(2, period+1 , 1):
             # Rolling create windows/subsets of prices and computes the mean of subset
             self.dfprices[nameIndic + price+'{}'.format(i)] = self.dfprices[price].rolling(window=i).mean()
 
@@ -70,8 +73,14 @@ class SMAPatterns():
                           & (self.dfprices["Close"].shift(1) < self.dfprices[nameIndic + price+'{}'.format(i)].shift(1))
 
             # Adding Entries to column Entry
-            self.dfprices.loc[FilterLong, 'ENTRY' + nameIndic + price+'{}'.format(i)] = "LARGO"
-            self.dfprices.loc[FilterShort, 'ENTRY' + nameIndic + price+'{}'.format(i)] = "CORTO"
+            if inverse:
+                self.dfprices.loc[FilterLong, 'ENTRY' + nameIndic + price+'{}'.format(i)] = "CORTO"
+                self.dfprices.loc[FilterShort, 'ENTRY' + nameIndic + price+'{}'.format(i)] = "LARGO"
+            else:
+                self.dfprices.loc[FilterLong, 'ENTRY' + nameIndic + price+'{}'.format(i)] = "LARGO"
+                self.dfprices.loc[FilterShort, 'ENTRY' + nameIndic + price+'{}'.format(i)] = "CORTO"
+
+
         #print(self.dfprices)
         
         return
@@ -83,8 +92,8 @@ class SMAPatterns():
         self.dfresults = pd.DataFrame(index=(pd.to_datetime(self.dfprices["Date"]).dt.year).drop_duplicates())
 
         # Consolidating Trade Strategy for every candle (k) and every period (i)
-        for k in range(0, candlesExp):
-            for i in range(2, period):
+        for k in range(0, candlesExp + 1, 1):
+            for i in range(2, period + 1, 1):
 
                 #Creating Filter to identify the LONG and SHORT Trades
                 FiltLongEntries = (self.dfprices['ENTRY' + nameIndic + price+'{}'.format(i)] == "LARGO")
@@ -100,18 +109,22 @@ class SMAPatterns():
                 Trades = pd.concat([TradesLong, TradesShort])
                 Trades.sort_index(inplace=True)
 
-                # Grouping by Years
+                # Creating column Year
                 Trades["Year"] = (pd.to_datetime(Trades["Date"]).dt.year)
-                self.dfresults[nameIndic + price+'{}'.format(i) + 'Cand{}'.format(k)] = \
-                    (Trades.groupby("Year")['PipsCandle{}'.format(k)].agg('sum')).values
 
-                # Performance
-                self.Expectancy.append(Trades['PipsCandle{}'.format(k)].mean())
-                self.PLTotal.append(Trades['PipsCandle{}'.format(k)].sum())
-                PosTrades = Trades[Trades['PipsCandle{}'.format(k)] > 0].shape[0]
-                NegTrades = Trades[Trades['PipsCandle{}'.format(k)] < 0].shape[0]
-                self.Accuracy.append(PosTrades / (PosTrades + NegTrades))
-                self.TotalTrades.append(Trades["Date"].count())
+                #The Strategy should have at least one trade per year
+                if len(self.dfresults.index) == len(Trades.groupby("Year")):
+                    # Grouping by Years
+                    self.dfresults[nameIndic + price+'{}'.format(i) + 'Cand{}'.format(k)] = \
+                        (Trades.groupby("Year")['PipsCandle{}'.format(k)].agg('sum')).values
+
+                    # Performance
+                    self.Expectancy.append(Trades['PipsCandle{}'.format(k)].mean())
+                    self.PLTotal.append(Trades['PipsCandle{}'.format(k)].sum())
+                    PosTrades = Trades[Trades['PipsCandle{}'.format(k)] > 0].shape[0]
+                    NegTrades = Trades[Trades['PipsCandle{}'.format(k)] < 0].shape[0]
+                    self.Accuracy.append(PosTrades / (PosTrades + NegTrades))
+                    self.TotalTrades.append(Trades["Date"].count())
 
         #print(self.dfresults)
         return
@@ -135,22 +148,51 @@ class SMAPatterns():
 
     def writeResults(self, price):
         dftotal = pd.concat([self.dfresults, self.dfperform])
-        dftotal.to_csv("SMAResults"+price+".csv", sep=',')
+        dftotal.T.to_csv(nameIndic+"Results"+price+".csv", sep=',')
         print("STRATEGIES BEST PERFORMANCES")
         print(self.dfperform.idxmax(1))
         print("STRATEGIES WORST PERFORMANCES")
         print(self.dfperform.idxmin(1))
         return
 
-    def singleStrategy(self, price, period, ):
+    def singleStrategy(self, price, period, candlesExp ):
+        # Creating Filter to identify the LONG and SHORT Trades
+        FiltLongEntries = (self.dfprices['ENTRY' + nameIndic + price + '{}'.format(period)] == "LARGO")
+        FiltShortEntries = (self.dfprices['ENTRY' + nameIndic + price + '{}'.format(period)] == "CORTO")
+
+        # Applying Filters on the dfprices and renaming the columns because of PipsLong and PipsShort
+        TradesLong = self.dfprices.loc[FiltLongEntries, ("Date", "Time","Open","CloseDate{}".format(candlesExp),\
+                                                         "CloseTime{}".format(candlesExp),\
+                                                         "ClosePrice{}".format(candlesExp),\
+                                                         "PipsLong{}".format(candlesExp))]
+        TradesLong.rename(columns={'PipsLong{}'.format(candlesExp): 'PipsCandle{}'.format(candlesExp)}, inplace=True)
+        TradesLong["POSITION"] = "LARGO"
+        TradesShort = self.dfprices.loc[FiltShortEntries, ("Date", "Time","Open","CloseDate{}".format(candlesExp),\
+                                                         "CloseTime{}".format(candlesExp),\
+                                                         "ClosePrice{}".format(candlesExp),\
+                                                         "PipsShort{}".format(candlesExp))]
+        TradesShort.rename(columns={'PipsShort{}'.format(candlesExp): 'PipsCandle{}'.format(candlesExp)}, inplace=True)
+        TradesShort["POSITION"] = "CORTO"
+
+        # Joining the LONG and SHORT Trades and sorting
+        Trades = pd.concat([TradesLong, TradesShort])
+        Trades.sort_index(inplace=True)
+
+        #Setting the column position at the beginning
+        cols = Trades.columns.tolist()
+        Trades = Trades[[cols[-1]] + cols[:-1]]
+
+        Trades.to_csv(nameIndic+"Strategy" + price + str(period) + "Cand" + str(candlesExp) + ".csv", sep=',', index=None)
+
         return
 
 
 if __name__ == "__main__":
     sma = SMAPatterns()
     sma.pipCandles(candlesExpired)
-    sma.smaPeriodPrice("Open",indPeriod)
+    sma.smaPeriodPrice("Open",indPeriod,False)
     sma.tradeStrategies("Open",indPeriod,candlesExpired)
     sma.performanceStrategies()
     sma.writeResults("Open")
+    #sma.singleStrategy("Open",3,0)
 

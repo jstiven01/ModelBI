@@ -180,3 +180,4 @@ TradesLong[TradesLong["Year"]==2014]["PipsCandle0"].sum()
 TradesShort["Year"]= (pd.to_datetime(TradesShort["Date"]).dt.year)
 TradesShort[TradesShort["Year"]==2014]["PipsCandle0"].sum()
 
+Trades["Date"].count()
