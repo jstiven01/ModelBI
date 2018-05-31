@@ -16,11 +16,11 @@ ctePips =10000
 #Constant Indicator
 nameIndic = "MA"
 #Constant Filename
-filename = "EURUSDDaily.csv"
+filename = "Preciosohlc.csv"
 #Constant candles expiration
-candlesExpired = 15
+candlesExpired = 48
 #Constant periods indicator
-indPeriod = 200
+indPeriod = 100
 #######################################
 
 class SMAPatterns():
@@ -40,21 +40,27 @@ class SMAPatterns():
         self.TotalTrades = []
         return
 
-    def pipCandles(self, candlesExp):
+    def pipCandles(self, candlesExp, singleStrategy):
         """Computing the Pips for every candle in both ways: LONG and SHORT """
 
         for i in range(0, candlesExp+1, 1):
+            if singleStrategy:
+                i = candlesExp
             self.dfprices['PipsLong{}'.format(i)] = (self.dfprices["Close"].shift(-i) - self.dfprices["Open"]) * ctePips
             self.dfprices['PipsShort{}'.format(i)] = (self.dfprices["Open"] - self.dfprices["Close"].shift(-i)) * ctePips
             self.dfprices['CloseDate{}'.format(i)] = self.dfprices["Date"].shift(-i)
             self.dfprices['CloseTime{}'.format(i)] = self.dfprices["Time"].shift(-i)
             self.dfprices['ClosePrice{}'.format(i)] = self.dfprices["Close"].shift(-i)
+            if singleStrategy:
+                break
         return
 
-    def smaPeriodPrice(self, price, period, inverse):
+    def smaPeriodPrice(self, price, period, inverse, singleStrategy):
         """Calculating SMA with price (open, close, high, low) and period"""
 
         for i in range(2, period+1 , 1):
+            if singleStrategy:
+                i=period
             # Rolling create windows/subsets of prices and computes the mean of subset
             self.dfprices[nameIndic + price+'{}'.format(i)] = self.dfprices[price].rolling(window=i).mean()
 
@@ -79,6 +85,9 @@ class SMAPatterns():
             else:
                 self.dfprices.loc[FilterLong, 'ENTRY' + nameIndic + price+'{}'.format(i)] = "LARGO"
                 self.dfprices.loc[FilterShort, 'ENTRY' + nameIndic + price+'{}'.format(i)] = "CORTO"
+
+            if singleStrategy:
+                break
 
 
         #print(self.dfprices)
@@ -156,6 +165,9 @@ class SMAPatterns():
         return
 
     def singleStrategy(self, price, period, candlesExp ):
+
+        self.pipCandles(candlesExp, True)
+        self.smaPeriodPrice(price,period,False, True)
         # Creating Filter to identify the LONG and SHORT Trades
         FiltLongEntries = (self.dfprices['ENTRY' + nameIndic + price + '{}'.format(period)] == "LARGO")
         FiltShortEntries = (self.dfprices['ENTRY' + nameIndic + price + '{}'.format(period)] == "CORTO")
@@ -189,10 +201,11 @@ class SMAPatterns():
 
 if __name__ == "__main__":
     sma = SMAPatterns()
-    sma.pipCandles(candlesExpired)
-    sma.smaPeriodPrice("Open",indPeriod,False)
-    sma.tradeStrategies("Open",indPeriod,candlesExpired)
-    sma.performanceStrategies()
-    sma.writeResults("Open")
-    #sma.singleStrategy("Open",3,0)
+    price = "Close"
+    #sma.pipCandles(candlesExpired)
+    #sma.smaPeriodPrice(price,indPeriod,False)
+    #sma.tradeStrategies(price,indPeriod,candlesExpired)
+    #sma.performanceStrategies()
+    #sma.writeResults(price)
+    sma.singleStrategy(price,4,15)
 
