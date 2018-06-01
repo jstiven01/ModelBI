@@ -8,30 +8,32 @@ Created on Wed May 30 08:23:54 2018
 
 import pandas as pd
 import numpy as np
+import argparse
 
 #######################################
 ##### CONSTANTS########################
-#Constant pips
-ctePips =10000
 #Constant Indicator
 nameIndic = "MA"
 #Constant Filename
 filename = "Preciosohlc.csv"
-#Constant candles expiration
-candlesExpired = 48
-#Constant periods indicator
-indPeriod = 100
 #######################################
 
 class SMAPatterns():
 
-    def __init__(self):
+    def __init__(self, ctepips, symbol):
         '''Initializing Attributes'''
 
         self.dfprices = pd.read_csv("../data/"+filename, header=None)
         # Naming Columns
         self.dfprices.columns = ["Date", "Time", "Open", "High", "Low", "Close", "Volume"]
 
+        #Constant Pips
+        self.ctePips = ctepips
+
+        #Symbol
+        self.symbol = symbol
+
+        #Dataframe Results and Perfomance
         self.dfresults = pd.DataFrame()
         self.dfperform = pd.DataFrame
         self.Expectancy = []
@@ -40,14 +42,14 @@ class SMAPatterns():
         self.TotalTrades = []
         return
 
-    def pipCandles(self, candlesExp, singleStrategy):
+    def pipCandles(self, candlesExp, singleStrategy = False):
         """Computing the Pips for every candle in both ways: LONG and SHORT """
 
         for i in range(0, candlesExp+1, 1):
             if singleStrategy:
                 i = candlesExp
-            self.dfprices['PipsLong{}'.format(i)] = (self.dfprices["Close"].shift(-i) - self.dfprices["Open"]) * ctePips
-            self.dfprices['PipsShort{}'.format(i)] = (self.dfprices["Open"] - self.dfprices["Close"].shift(-i)) * ctePips
+            self.dfprices['PipsLong{}'.format(i)] = (self.dfprices["Close"].shift(-i) - self.dfprices["Open"]) * self.ctePips
+            self.dfprices['PipsShort{}'.format(i)] = (self.dfprices["Open"] - self.dfprices["Close"].shift(-i)) * self.ctePips
             self.dfprices['CloseDate{}'.format(i)] = self.dfprices["Date"].shift(-i)
             self.dfprices['CloseTime{}'.format(i)] = self.dfprices["Time"].shift(-i)
             self.dfprices['ClosePrice{}'.format(i)] = self.dfprices["Close"].shift(-i)
@@ -55,7 +57,7 @@ class SMAPatterns():
                 break
         return
 
-    def smaPeriodPrice(self, price, period, inverse, singleStrategy):
+    def smaPeriodPrice(self, price, period, inverse, singleStrategy = False):
         """Calculating SMA with price (open, close, high, low) and period"""
 
         for i in range(2, period+1 , 1):
@@ -157,7 +159,7 @@ class SMAPatterns():
 
     def writeResults(self, price):
         dftotal = pd.concat([self.dfresults, self.dfperform])
-        dftotal.T.to_csv(nameIndic+"Results"+price+".csv", sep=',')
+        dftotal.T.to_csv(self.symbol+nameIndic+"Results"+price+".csv", sep=',')
         print("STRATEGIES BEST PERFORMANCES")
         print(self.dfperform.idxmax(1))
         print("STRATEGIES WORST PERFORMANCES")
@@ -184,15 +186,15 @@ class SMAPatterns():
         cols = Pattern.columns.tolist()
         Pattern = Pattern[[cols[-1]] + cols[:-1]]
 
-        Pattern.to_csv(nameIndic + "Patterns" + price + str(period) + "Cand" + str(candlesExp) + ".csv", sep=',',
+        Pattern.to_csv(self.symbol+nameIndic + "Patterns" + price + str(period) + "Cand" + str(candlesExp) + ".csv", sep=',',
                       index=None)
 
         return
 
-    def singleStrategy(self, price, period, candlesExp ):
+    def singleStrategy(self, price, period, candlesExp, mode):
 
         self.pipCandles(candlesExp, True)
-        self.smaPeriodPrice(price,period,False, True)
+        self.smaPeriodPrice(price, period, mode, True)
         # Creating Filter to identify the LONG and SHORT Trades
         FiltLongEntries = (self.dfprices['ENTRY' + nameIndic + price + '{}'.format(period)] == "LARGO")
         FiltShortEntries = (self.dfprices['ENTRY' + nameIndic + price + '{}'.format(period)] == "CORTO")
@@ -219,20 +221,61 @@ class SMAPatterns():
         cols = Trades.columns.tolist()
         Trades = Trades[[cols[-1]] + cols[:-1]]
 
-        Trades.to_csv(nameIndic+"Strategy" + price + str(period) + "Cand" + str(candlesExp) + ".csv", sep=',', index=None)
+        Trades.to_csv(self.symbol+nameIndic+"Strategy" + price + str(period) + "Cand" + str(candlesExp) + ".csv",
+                      sep=',', index=None)
 
         self.writingPatterns(price, period, candlesExp)
+
+        print("Check Files of Strategy and Patterns")
+
+        return
+
+    def simulateStrategies(self, price, period, candlesExpired, mode):
+        self.pipCandles(candlesExpired)
+        self.smaPeriodPrice(price, period, mode)
+        self.tradeStrategies(price, period, candlesExpired)
+        self.performanceStrategies()
+        self.writeResults(price)
 
         return
 
 
 if __name__ == "__main__":
-    sma = SMAPatterns()
-    price = "Close"
-    #sma.pipCandles(candlesExpired)
-    #sma.smaPeriodPrice(price,indPeriod,False)
-    #sma.tradeStrategies(price,indPeriod,candlesExpired)
-    #sma.performanceStrategies()
-    #sma.writeResults(price)
-    sma.singleStrategy(price,4,15)
+
+    # create the top-level parser
+    parser = argparse.ArgumentParser(prog='SMAPatterns')
+    parser.add_argument('--sim', action='store_true',
+                        help='Start simulation')
+    parser.add_argument('--strg', action='store_true',
+                        help='Generate single strategy')
+    parser.add_argument('--period', type=int, required=True,
+                         help='Periods of SMA to simulate/evaluate')
+    parser.add_argument('--candlesexp', type=int, required=True,
+                         help='Candles to close Trade')
+    parser.add_argument('--price', type=str, required=True,
+                         help='Type of Price to use in SMA (open, high, low, close) in lowercase')
+    parser.add_argument('--symbol', type=str, required=True,
+                         help='Symbol tu evaluate: AUDUSD, EURJPY, ...')
+    parser.add_argument('--inv', action='store_true',
+                        help='Generate Inverse Trades')
+
+
+    clargs = parser.parse_args()
+
+    #Selecting constant pips
+    symbol = clargs.symbol.upper()
+    if symbol.find('JPY',3) == -1: #No String JPY
+        ctepips = 10000
+    else:
+        ctepips = 100
+
+    #Creating SMAAPattern's Object
+    sma = SMAPatterns(ctepips, symbol)
+
+    if clargs.sim:
+        sma.simulateStrategies(clargs.price.title(), clargs.period, clargs.candlesexp, clargs.inv)
+    elif clargs.strg:
+        sma.singleStrategy(clargs.price.title(), clargs.period, clargs.candlesexp, clargs.inv)
+
+
 
