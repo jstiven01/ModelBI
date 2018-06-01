@@ -164,6 +164,31 @@ class SMAPatterns():
         print(self.dfperform.idxmin(1))
         return
 
+    def writingPatterns(self, price, period, candlesExp):
+
+
+        # Creating Filter to identify the LONG and SHORT Pattern
+        FiltLongEntries =  ((self.dfprices['ENTRY' + nameIndic + price + '{}'.format(period)]).shift(-1) == "LARGO")
+        FiltShortEntries = ((self.dfprices['ENTRY' + nameIndic + price + '{}'.format(period)]).shift(-1) == "CORTO")
+
+        # Applying Filters on the dfprices and renaming the columns because of PipsLong and PipsShort
+        PatternLong = self.dfprices.loc[FiltLongEntries,("Date", "Time","Open","High","Low","Close")]
+        PatternShort = self.dfprices.loc[FiltShortEntries,("Date", "Time","Open","High","Low","Close")]
+
+        # Joining the LONG and SHORT Pattern and sorting
+        Pattern = pd.concat([PatternLong, PatternShort])
+        Pattern.sort_index(inplace=True)
+
+        #Setting the column position at the beginning
+        Pattern["NAMEPATTERN"] = nameIndic + price + str(period) + "Cand" + str(candlesExp)
+        cols = Pattern.columns.tolist()
+        Pattern = Pattern[[cols[-1]] + cols[:-1]]
+
+        Pattern.to_csv(nameIndic + "Patterns" + price + str(period) + "Cand" + str(candlesExp) + ".csv", sep=',',
+                      index=None)
+
+        return
+
     def singleStrategy(self, price, period, candlesExp ):
 
         self.pipCandles(candlesExp, True)
@@ -195,6 +220,8 @@ class SMAPatterns():
         Trades = Trades[[cols[-1]] + cols[:-1]]
 
         Trades.to_csv(nameIndic+"Strategy" + price + str(period) + "Cand" + str(candlesExp) + ".csv", sep=',', index=None)
+
+        self.writingPatterns(price, period, candlesExp)
 
         return
 
